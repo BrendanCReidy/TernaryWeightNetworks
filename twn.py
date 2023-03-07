@@ -6,19 +6,6 @@ import math
 """
 Methods
 """
-def Ternarize(tensor):
-    tensor = tensor.cpu()
-    output = torch.zeros(tensor.size())
-    delta = Delta(tensor)
-    alpha = Alpha(tensor,delta)
-    for i in range(tensor.size()[0]):
-        for w in tensor[i].view(1,-1):
-            pos_one = (w > delta[i]).type(torch.FloatTensor)
-            neg_one = torch.mul((w < -delta[i]).type(torch.FloatTensor),-1)
-        out = torch.add(pos_one,neg_one).view(tensor.size()[1:])
-        output[i] = torch.add(output[i],torch.mul(out,alpha[i]))
-    return output
-
 def ternarize(tensor):
     delta = get_delta(tensor)
     alpha = get_alpha(tensor,delta)
@@ -47,30 +34,6 @@ def get_delta(tensor):
     norm_sum = norm.sum(1)
     delta = (0.7/n)*norm_sum
     return delta.view(view_dims)
-
-def Delta(tensor):
-        n = tensor[0].nelement()
-        if(len(tensor.size()) == 4):     #convolution layer
-            delta = 0.7 * tensor.norm(1,3).view(tensor.shape[0],-1).sum(1).div(n)
-        elif(len(tensor.size()) == 2):   #fc layer
-            delta = 0.7 * tensor.norm(1,1).div(n)
-        return delta
-
-def Alpha(tensor,delta):
-    Alpha = []
-    for i in range(tensor.size()[0]):
-        count = 0
-        abssum = 0
-        absvalue = tensor[i].view(1,-1).abs()
-        for w in absvalue:
-            truth_value = w > delta[i] #print to see
-        count = truth_value.sum()
-        abssum = torch.matmul(absvalue,truth_value.type(torch.FloatTensor).view(-1,1))
-        Alpha.append(abssum/count)
-    alpha = Alpha[0]
-    for i in range(len(Alpha) - 1):
-        alpha = torch.cat((alpha,Alpha[i+1]))
-    return alpha
 
 """
 Gradients
@@ -230,9 +193,6 @@ if __name__ == "__main__":
     delta = get_delta(x)
     alpha = get_alpha(x,delta)
     ternary = ternarize(x)
-    ternary2 = Ternarize(x)
-    mse = (ternary-ternary2).mean()*(ternary-ternary2).mean()
-    print("MSE1",mse)
 
 
     x2 = torch.randn((4,3))
@@ -240,6 +200,4 @@ if __name__ == "__main__":
     alpha = Alpha(x2,delta)
     alpha = get_alpha(x2,delta)
     ternary = ternarize(x2)
-    ternary2 = Ternarize(x2)
-    mse = (ternary-ternary2).mean()*(ternary-ternary2).mean()
-    print("MSE2",mse)
+    
