@@ -17,31 +17,13 @@ from thop import profile as thop_profile
 from models import *
 
 
-parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
-
-parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
-                    help='number of data loading workers (default: 4)')
-
-parser.add_argument('-tr', '--tran', default="t", type=str, metavar='N',
-                    help='(t/f) use transformer model (default: t)')
-parser.add_argument('-dm', '--d_model', default=512, type=int, metavar='N',
-                    help='hidden size for model')
-
-parser.add_argument('--warmup', default="t", type=str, metavar='N',
-                    help='use warmup lr')
-
-parser.add_argument('-hc', '--heads', default=8, type=int, metavar='N',
-                    help='number of heads for model')
-parser.add_argument('-el', '--encoder_layers', default=1, type=int, metavar='N',
-                    help='number of encoder layers for model')
+parser = argparse.ArgumentParser(description='Ternary Weight Networks in PyTorch')
 
 parser.add_argument('--epochs', default=10, type=int, metavar='N',
                     help='number of total epochs to run')
-parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
-                    help='manual epoch number (useful on restarts)')
 parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N', help='mini-batch size (default: 128)')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -49,12 +31,6 @@ parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=50, type=int,
                     metavar='N', help='print frequency (default: 50)')
-parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                    help='path to latest checkpoint (default: none)')
-parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
-                    help='evaluate model on validation set')
-parser.add_argument('--pretrained', dest='pretrained', action='store_true',
-                    help='use pre-trained model')
 parser.add_argument('--half', dest='half', action='store_true',
                     help='use half-precision(16-bit) ')
 parser.add_argument('--save-dir', dest='save_dir',
@@ -63,14 +39,15 @@ parser.add_argument('--save-dir', dest='save_dir',
 parser.add_argument('--save-every', dest='save_every',
                     help='Saves checkpoints at every specified number of epochs',
                     type=int, default=10)
+
+parser.add_argument('--history-file', "--hf", dest='history_file',
+                    help='File to save training history to',
+                    type=str, default="mnist_train_history")
 best_prec1 = 0
 def main():
     global args, best_prec1
     args = parser.parse_args()
-    out_name = "twn_test"
-
-
-    print(args.tran, args.d_model, args.heads, args.encoder_layers)
+    out_name = args.history_file
 
     # Check the save_dir exists or not
     if not os.path.exists(args.save_dir):
@@ -87,28 +64,24 @@ def main():
     model.cuda()
 
     print("*"*20)
-    print("Running variant ", out_name)
+    print("Training model ", out_name)
     print("MACs", macs, "Params", params)
     print()
     print()
     print("*"*20)
-    cudnn.benchmark = True
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
     train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('./mnist_data', train=True, download=True,
+    datasets.MNIST('./data', train=True, download=True,
                    transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
                    ])),
     batch_size=args.batch_size, shuffle=True)
-    ###################################################################
-    ##             Load Test Dataset                                ##
-    ###################################################################
     val_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('./mnist_data', train=False, download=True,
+    datasets.MNIST('./data', train=False, download=True,
                     transform=transforms.Compose([
                        transforms.ToTensor(),
                        transforms.Normalize((0.1307,), (0.3081,))
@@ -122,18 +95,15 @@ def main():
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
 
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=int(args.epochs)) # CH1
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=int(args.epochs))
 
     out_data = []
-    for epoch in range(args.start_epoch, args.epochs):
-        # train for one epoch
+    for epoch in range(0, args.epochs):
         train_top1, train_loss = train(train_loader, model, criterion, optimizer, epoch)
         lr_scheduler.step()
 
-        # evaluate on validation set
         prec1, val_loss = validate(val_loader, model, criterion)
 
-        # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
 
@@ -160,7 +130,7 @@ def main():
         'best_prec1': best_prec1,
     }, is_best, filename=os.path.join(args.save_dir, out_name + '.th'))
     df = pd.DataFrame(out_data)
-    df.to_csv(out_name + "_training_history.csv")
+    df.to_csv(out_name + ".csv")
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
