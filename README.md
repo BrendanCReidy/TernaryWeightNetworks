@@ -16,3 +16,13 @@ For CIFAR10 we use a ternary version of the MobileNetV2 architecture and train f
 ```
 python3 main_cifar10.py
 ```
+
+### Results
+
+--------------------------------------------------------------
+| Dataset | Model       | Ternary Test Acc  | FP32 Test Acc  |
+--------------------------------------------------------------
+| MNIST   | LeNet5      | 99.14%            | TBD            |
+--------------------------------------------------------------
+| CIFAR10 | MobileNetV2 | TBD               | TBD            |
+--------------------------------------------------------------
