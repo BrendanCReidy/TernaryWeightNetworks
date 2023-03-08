@@ -19,7 +19,6 @@ python3 main_cifar10.py
 
 ### Results
 
-| --------|-------------|-------------------|--------------- |
 | Dataset | Model       | Ternary Test Acc  | FP32 Test Acc  |
 |:-------:|:-----------:|:-----------------:|:--------------:|
 | MNIST   | LeNet5      | 99.14%            | TBD            |
