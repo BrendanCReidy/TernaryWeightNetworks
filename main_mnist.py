@@ -53,7 +53,7 @@ def main():
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
     model_params = {}
-    model = TernaryLeNet5()
+    model = TernaryLeNet5(ternarized=False)
     core_model = model
 
     x = torch.empty(1, 1, 28, 28)
