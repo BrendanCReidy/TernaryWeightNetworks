@@ -15,14 +15,18 @@ def ternarize(tensor):
     return ternary*alpha
 
 
-def get_alpha(tensor,delta):
+def get_alpha(tensor,delta,epsilon=1e-4):
     ndim = len(tensor.shape)
     view_dims = (-1,) + (ndim-1)*(1,)
     i_delta = (torch.abs(tensor)>delta)
     i_delta_count = i_delta.view(i_delta.shape[0],-1).sum(1)
+    i_delta_count[i_delta_count==0] = 1 # fixed divide by zero issue that was causing nan loss... nvm
     tensor_thresh = torch.where((i_delta),tensor,0)
     alpha = (1/i_delta_count)*(torch.abs(tensor_thresh.view(tensor.shape[0],-1)).sum(1))
     alpha = alpha.view(view_dims)
+    alpha[alpha<epsilon] = epsilon
+    if not torch.min(alpha).item() > epsilon:
+        raise ValueError('Loss boutta go nan')
     return alpha
 
 
@@ -41,15 +45,17 @@ Gradients
 class TernaryLinearGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, bias, ternarized):
-        ctx.save_for_backward(input, weight)
+
+        ternary_w = weight
         if ternarized:
-            weight = ternarize(weight)
-        return torch.matmul(input, weight) + bias
+            ternary_w = ternarize(weight)
+        ctx.save_for_backward(input, weight, ternary_w)
+        return torch.matmul(input, ternary_w) + bias
 
     @staticmethod
     def backward(ctx, grad_output):
-        input,weight = ctx.saved_tensors
-        d_input = torch.matmul(grad_output, torch.transpose(weight,0,1))
+        input,weight,ternary_w = ctx.saved_tensors
+        d_input = torch.matmul(grad_output, torch.transpose(ternary_w,0,1))
         d_bias = grad_output.sum(dim=0)
 
         d_weight = torch.matmul(torch.transpose(input, 0, 1), grad_output)
@@ -58,18 +64,19 @@ class TernaryLinearGrad(torch.autograd.Function):
 class TernaryConv2DGrad(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, bias, stride, padding, groups, ternarized):
-        ctx.save_for_backward(input, weight, bias)
-
         ctx.stride=stride
         ctx.padding=padding
         ctx.groups=groups
+
+        ternary_w = weight
         if ternarized:
-            weight = ternarize(weight)
-        return F.conv2d(input, weight, bias, stride=stride, padding=padding, groups=groups)
+            ternary_w = ternarize(weight)
+        ctx.save_for_backward(input, weight, ternary_w, bias)
+        return F.conv2d(input, ternary_w, bias, stride=stride, padding=padding, groups=groups)
 
     @staticmethod
     def backward(ctx, grad_output):
-        input,weight,bias = ctx.saved_tensors
+        input,weight,ternary_w,bias = ctx.saved_tensors
         stride=ctx.stride
         padding=ctx.padding
         groups=ctx.groups
@@ -77,32 +84,32 @@ class TernaryConv2DGrad(torch.autograd.Function):
         n_bias = bias.size()[0]
         d_bias = torch.reshape(grad_output, (n_bias,-1)).sum(dim=1)
 
-        d_input = torch.nn.grad.conv2d_input(input.shape, weight, grad_output, stride=stride, padding=padding, groups=groups)
+        d_input = torch.nn.grad.conv2d_input(input.shape, ternary_w, grad_output, stride=stride, padding=padding, groups=groups)
         d_weight = torch.nn.grad.conv2d_weight(input, weight.shape, grad_output, stride=stride, padding=padding, groups=groups)
         return d_input, d_weight, d_bias, None, None, None, None
 
 class TernaryConv2DGradNoBias(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, weight, stride, padding, groups, ternarized):
-        ctx.save_for_backward(input, weight)
 
         ctx.stride=stride
         ctx.padding=padding
         ctx.groups=groups
+        
+        ternary_w = weight
         if ternarized:
             ternary_w = ternarize(weight)
-        else:
-            ternary_w = weight
+        ctx.save_for_backward(input, weight, ternary_w)
         return F.conv2d(input, ternary_w, None, stride=stride, padding=padding, groups=groups)
 
     @staticmethod
     def backward(ctx, grad_output):
-        input,weight = ctx.saved_tensors
+        input,weight,ternary_w = ctx.saved_tensors
         stride=ctx.stride
         padding=ctx.padding
         groups=ctx.groups
 
-        d_input = torch.nn.grad.conv2d_input(input.shape, weight, grad_output, stride=stride, padding=padding, groups=groups)
+        d_input = torch.nn.grad.conv2d_input(input.shape, ternary_w, grad_output, stride=stride, padding=padding, groups=groups)
         d_weight = torch.nn.grad.conv2d_weight(input, weight.shape, grad_output, stride=stride, padding=padding, groups=groups)
         return d_input, d_weight, None, None, None, None
 """

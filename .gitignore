@@ -1,3 +1,4 @@
+.gitignore
 mnist_data/
 data/
 save_temp/
