@@ -103,8 +103,13 @@ def main():
 
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=int(args.epochs))
 
+    for param_group in optimizer.param_groups: # set warmup lr
+            param_group['lr'] = args.lr*0.1
     out_data = []
     for epoch in range(0, args.epochs):
+        if epoch==1: # do warmup for one epoch then change back
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = args.lr
         train_top1, train_loss = train(train_loader, model, criterion, optimizer, epoch)
         lr_scheduler.step()
 

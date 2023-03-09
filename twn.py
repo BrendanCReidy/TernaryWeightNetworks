@@ -3,10 +3,28 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+
+"""
+Implements ternary weight networks based on
+    [1] Li, Fengfu et al. "Ternary Weight Networks." (2016). 
+
+    example ternarized values:
+    tensor = [[0.51,0.12,-0.14 .., -1.42], ..., [-0.71,0.38,0.61 .., 0.54]]
+    delta = get_delta(tensor) -> [0.3, ... ,0.4]
+    alpha = get_alpha(tensor, delta) -> [0.76, ... ,0.76]
+    ternary_tensor = ternarize(tensor) -> [[0.76,0,0 .., 0.76], ..., [-0.41,0,0.76, .., 0.41]]
+"""
+
+
 """
 Methods
 """
 def ternarize(tensor):
+    """
+    Input: tensor of weights to ternarize
+    Output: tensor of ternarized weights (multiplied by alpha for training)
+    Description: Implementation of equation (3) from [1]
+    """
     delta = get_delta(tensor)
     alpha = get_alpha(tensor,delta)
     pos = torch.where(tensor>delta,1,tensor)
@@ -15,35 +33,45 @@ def ternarize(tensor):
     return ternary*alpha
 
 
-def get_alpha(tensor,delta,epsilon=1e-4):
+def get_alpha(tensor,delta):
+    """
+    Input: tensor of weights, and delta value (aka threshold)
+    Output: alpha values (aka scaling factor)
+    Description: Implementation of equation (5) from [1]
+    """
     ndim = len(tensor.shape)
     view_dims = (-1,) + (ndim-1)*(1,)
     i_delta = (torch.abs(tensor)>delta)
     i_delta_count = i_delta.view(i_delta.shape[0],-1).sum(1)
-    i_delta_count[i_delta_count==0] = 1 # fixed divide by zero issue that was causing nan loss... nvm
     tensor_thresh = torch.where((i_delta),tensor,0)
     alpha = (1/i_delta_count)*(torch.abs(tensor_thresh.view(tensor.shape[0],-1)).sum(1))
     alpha = alpha.view(view_dims)
-    alpha[alpha<epsilon] = epsilon
     return alpha
 
 
 def get_delta(tensor):
+    """
+    Input: tensor of weights (can be conv or fc)
+    Output: delta values (thresholds)
+    Description: Implementation of equation (6) from [1]
+    """
     ndim = len(tensor.shape)
     view_dims = (-1,) + (ndim-1)*(1,)
     n = tensor[0].nelement()
     norm = tensor.norm(1,ndim-1).view(tensor.shape[0],-1)
     norm_sum = norm.sum(1)
-    delta = (0.7/n)*norm_sum
+    delta = (0.75/n)*norm_sum
     return delta.view(view_dims)
 
 """
 Gradients
 """
 class TernaryLinearGrad(torch.autograd.Function):
+    """
+    Forward and backwards pass for a ternary FC layer
+    """
     @staticmethod
     def forward(ctx, input, weight, bias, ternarized):
-
         ternary_w = weight
         if ternarized:
             ternary_w = ternarize(weight)
@@ -60,6 +88,9 @@ class TernaryLinearGrad(torch.autograd.Function):
         return d_input, d_weight, d_bias, None
 
 class TernaryConv2DGrad(torch.autograd.Function):
+    """
+    Forward and backwards pass for a ternary conv
+    """
     @staticmethod
     def forward(ctx, input, weight, bias, stride, padding, groups, ternarized):
         ctx.stride=stride
@@ -87,6 +118,9 @@ class TernaryConv2DGrad(torch.autograd.Function):
         return d_input, d_weight, d_bias, None, None, None, None
 
 class TernaryConv2DGradNoBias(torch.autograd.Function):
+    """
+    Forward and backwards pass for a ternary conv w/o bias
+    """
     @staticmethod
     def forward(ctx, input, weight, stride, padding, groups, ternarized):
 
@@ -114,6 +148,9 @@ class TernaryConv2DGradNoBias(torch.autograd.Function):
 Layers
 """
 class TernaryLinear(torch.nn.Module):
+    """
+    A ternary FC/Linear layer
+    """
     def __init__(self, in_features, out_features, ternarized=True):
         super(TernaryLinear, self).__init__()
         self.in_features = in_features
@@ -145,6 +182,9 @@ class TernaryLinear(torch.nn.Module):
         return TernaryLinearGrad.apply(input, self.weights, self.bias, self.ternarized)
 
 class TernaryConv2d(torch.nn.Module):
+    """
+    A ternary conv2d layer
+    """
     def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=1, bias=True, groups=1, ternarized=True):
         super(TernaryConv2d, self).__init__()
         if type(kernel_size)==int:
