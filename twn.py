@@ -25,8 +25,6 @@ def get_alpha(tensor,delta,epsilon=1e-4):
     alpha = (1/i_delta_count)*(torch.abs(tensor_thresh.view(tensor.shape[0],-1)).sum(1))
     alpha = alpha.view(view_dims)
     alpha[alpha<epsilon] = epsilon
-    if not torch.min(alpha).item() > epsilon:
-        raise ValueError('Loss boutta go nan')
     return alpha
 
 
@@ -204,7 +202,6 @@ if __name__ == "__main__":
 
     x2 = torch.randn((4,3))
     delta = get_delta(x2)
-    alpha = Alpha(x2,delta)
     alpha = get_alpha(x2,delta)
     ternary = ternarize(x2)
     
