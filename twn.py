@@ -11,8 +11,8 @@ Implements ternary weight networks based on
     example ternarized values:
     tensor = [[0.51,0.12,-0.14 .., -1.42], ..., [-0.71,0.38,0.61 .., 0.54]]
     delta = get_delta(tensor) -> [0.3, ... ,0.4]
-    alpha = get_alpha(tensor, delta) -> [0.76, ... ,0.76]
-    ternary_tensor = ternarize(tensor) -> [[0.76,0,0 .., 0.76], ..., [-0.41,0,0.76, .., 0.41]]
+    alpha = get_alpha(tensor, delta) -> [0.76, ... ,0.41]
+    ternary_tensor = ternarize(tensor) -> [[0.76,0,0 .., 0.76], ..., [-0.41,0,0.41, .., 0.41]]
 """
 
 
